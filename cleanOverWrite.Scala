@@ -1,9 +1,29 @@
+import org.apache.spark.sql.{SparkSession, DataFrame}
+import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.hadoop.fs.{Path, FileSystem)
+object AvroDataWriter {
+  def overwriteAvroFile(avroFilePath: String, tempAvroFilePath: String, modifiedDF: DataFrame): Unit = {
+    // Create a Spark session
+    val spark = SparkSession.builder.appName("AvroDataWriter").getOrCreate()
 
-val tempAvroFilePath = "data/1/avro-temp"
-modifiedDF.write.format("avro").mode("overwrite").save(tempAvroFilePath)
+    // Handle exceptions and ensure proper cleanup
+    try {
+      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+      if (fs.exists(new Path(avroFilePath))) {
+        fs.delete(new Path(avroFilePath), true)
+      }
 
-val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
-fs.delete(new Path(avroFilePath), true)
-fs.rename(new Path(tempAvroFilePath), new Path(avroFilePath))
+      modifiedDF.write.format("avro").mode("overwrite").save(tempAvroFilePath)
+
+      if (fs.exists(new Path(tempAvroFilePath))) {
+        fs.rename(new Path(tempAvroFilePath), new Path(avroFilePath))
+      } else {
+        throw new RuntimeException("Write to temporary location failed.")
+      }
+
+    } catch {
+      case e: Exception =>
+        e.printStackTrace()
+
+    }
+  }
